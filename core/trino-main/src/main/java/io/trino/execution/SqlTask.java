@@ -107,7 +107,7 @@ public class SqlTask
     private final QueryContext queryContext;
     private final Tracer tracer;
 
-    private final SqlTaskExecutionFactory sqlTaskExecutionFactory;
+    private final TaskExecutionFactory taskExecutionFactory;
     private final Executor taskNotificationExecutor;
 
     private final AtomicReference<Instant> lastHeartbeat = new AtomicReference<>(Instant.now());
@@ -129,7 +129,7 @@ public class SqlTask
             String nodeId,
             QueryContext queryContext,
             Tracer tracer,
-            SqlTaskExecutionFactory sqlTaskExecutionFactory,
+            TaskExecutionFactory taskExecutionFactory,
             ExecutorService taskNotificationExecutor,
             Consumer<SqlTask> onDone,
             DataSize maxBufferSize,
@@ -137,7 +137,7 @@ public class SqlTask
             ExchangeManagerRegistry exchangeManagerRegistry,
             CounterStat failedTasks)
     {
-        SqlTask sqlTask = new SqlTask(taskId, location, nodeId, queryContext, tracer, sqlTaskExecutionFactory, taskNotificationExecutor, maxBufferSize, maxBroadcastBufferSize, exchangeManagerRegistry);
+        SqlTask sqlTask = new SqlTask(taskId, location, nodeId, queryContext, tracer, taskExecutionFactory, taskNotificationExecutor, maxBufferSize, maxBroadcastBufferSize, exchangeManagerRegistry);
         sqlTask.initialize(onDone, failedTasks);
         return sqlTask;
     }
@@ -148,7 +148,7 @@ public class SqlTask
             String nodeId,
             QueryContext queryContext,
             Tracer tracer,
-            SqlTaskExecutionFactory sqlTaskExecutionFactory,
+            TaskExecutionFactory taskExecutionFactory,
             ExecutorService taskNotificationExecutor,
             DataSize maxBufferSize,
             DataSize maxBroadcastBufferSize,
@@ -160,7 +160,7 @@ public class SqlTask
         this.nodeId = requireNonNull(nodeId, "nodeId is null");
         this.queryContext = requireNonNull(queryContext, "queryContext is null");
         this.tracer = requireNonNull(tracer, "tracer is null");
-        this.sqlTaskExecutionFactory = requireNonNull(sqlTaskExecutionFactory, "sqlTaskExecutionFactory is null");
+        this.taskExecutionFactory = requireNonNull(taskExecutionFactory, "taskExecutionFactory is null");
         this.taskNotificationExecutor = requireNonNull(taskNotificationExecutor, "taskNotificationExecutor is null");
         requireNonNull(maxBufferSize, "maxBufferSize is null");
 
@@ -408,7 +408,7 @@ public class SqlTask
             // if task FINISHED successfully but taskHolder is not yet updated with SqlTaskExecution or FinalTaskInfo
             // we are masking the state and return RUNNING. This is important so coordinator would not consider incomplete
             // task information (e.g. missing proper dynamicFiltersVersion as final).
-            // This covers only short time window between call to SqlTaskExecution.start() and updating taskHolder reference in tryCreateSqlTaskExecution,
+            // This covers only short time window between call to SqlTaskExecution.start() and updating taskHolder reference in tryCreateTaskExecution,
             // so it will not add any noticable delays.
             state = RUNNING;
         }
@@ -445,7 +445,7 @@ public class SqlTask
         if (finalTaskInfo != null) {
             return finalTaskInfo.stats();
         }
-        SqlTaskExecution taskExecution = taskHolder.getTaskExecution();
+        TaskExecution taskExecution = taskHolder.getTaskExecution();
         if (taskExecution != null) {
             return taskExecution.getTaskContext().getTaskStats();
         }
@@ -460,7 +460,7 @@ public class SqlTask
         if (finalTaskInfo != null) {
             return finalTaskInfo.noMoreSplits();
         }
-        SqlTaskExecution taskExecution = taskHolder.getTaskExecution();
+        TaskExecution taskExecution = taskHolder.getTaskExecution();
         if (taskExecution != null) {
             return taskExecution.getNoMoreSplits();
         }
@@ -533,10 +533,10 @@ public class SqlTask
                 return taskHolder.getFinalTaskInfo();
             }
 
-            SqlTaskExecution taskExecution = taskHolder.getTaskExecution();
+            TaskExecution taskExecution = taskHolder.getTaskExecution();
             if (taskExecution == null) {
                 checkState(fragment.isPresent(), "fragment must be present");
-                taskExecution = tryCreateSqlTaskExecution(session, stageSpan, fragment.get(), tableCredentials);
+                taskExecution = tryCreateTaskExecution(session, stageSpan, fragment.get(), tableCredentials);
             }
             // taskExecution can still be null if the creation was skipped
             if (taskExecution != null) {
@@ -559,9 +559,9 @@ public class SqlTask
     }
 
     @Nullable
-    private SqlTaskExecution tryCreateSqlTaskExecution(Session session, Span stageSpan, PlanFragment fragment, Map<PlanNodeId, ConnectorTableCredentials> tableCredentials)
+    private TaskExecution tryCreateTaskExecution(Session session, Span stageSpan, PlanFragment fragment, Map<PlanNodeId, ConnectorTableCredentials> tableCredentials)
     {
-        SqlTaskExecution execution;
+        TaskExecution execution;
         synchronized (taskHolderLock) {
             // Recheck holder for task execution after acquiring the lock
             TaskHolder taskHolder = taskHolderReference.get();
@@ -585,7 +585,7 @@ public class SqlTask
                     .setAttribute(TrinoAttributes.TASK_ID, taskId.toString())
                     .startSpan());
 
-            execution = sqlTaskExecutionFactory.create(
+            execution = taskExecutionFactory.create(
                     session,
                     taskSpan.get(),
                     queryContext,
@@ -662,7 +662,7 @@ public class SqlTask
 
     private static final class TaskHolder
     {
-        private final SqlTaskExecution taskExecution;
+        private final TaskExecution taskExecution;
         private final TaskInfo finalTaskInfo;
         private final SqlTaskIoTotals finalIoTotals;
         private final VersionedDynamicFilterDomains finalDynamicFilterDomains;
@@ -675,7 +675,7 @@ public class SqlTask
             this.finalDynamicFilterDomains = null;
         }
 
-        private TaskHolder(SqlTaskExecution taskExecution)
+        private TaskHolder(TaskExecution taskExecution)
         {
             this.taskExecution = requireNonNull(taskExecution, "taskExecution is null");
             this.finalTaskInfo = null;
@@ -697,7 +697,7 @@ public class SqlTask
         }
 
         @Nullable
-        public SqlTaskExecution getTaskExecution()
+        public TaskExecution getTaskExecution()
         {
             return taskExecution;
         }
@@ -782,7 +782,7 @@ public class SqlTask
 
     public Optional<TaskContext> getTaskContext()
     {
-        SqlTaskExecution taskExecution = taskHolderReference.get().getTaskExecution();
+        TaskExecution taskExecution = taskHolderReference.get().getTaskExecution();
         if (taskExecution == null) {
             return Optional.empty();
         }

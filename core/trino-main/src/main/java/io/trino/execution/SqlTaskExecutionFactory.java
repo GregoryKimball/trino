@@ -35,6 +35,7 @@ import static io.trino.tracing.ScopedSpan.scopedSpan;
 import static java.util.Objects.requireNonNull;
 
 public class SqlTaskExecutionFactory
+        implements TaskExecutionFactory
 {
     private final Executor taskNotificationExecutor;
 
@@ -60,6 +61,7 @@ public class SqlTaskExecutionFactory
         this.cpuTimerEnabled = config.isTaskCpuTimerEnabled();
     }
 
+    @Override
     public SqlTaskExecution create(
             Session session,
             Span taskSpan,
