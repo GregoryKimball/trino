@@ -261,7 +261,7 @@ public class SqlTaskManager
         this.driverYieldExecutor = newScheduledThreadPool(config.getTaskYieldThreads(), threadsNamed("task-yield-%s"));
         this.driverTimeoutExecutor = newScheduledThreadPool(config.getDriverTimeoutThreads(), threadsNamed("task-driver-timeout-%s"));
 
-        TaskExecutionFactory defaultTaskExecutionFactory = new SqlTaskExecutionFactory(taskNotificationExecutor, taskExecutor, planner, tracer, config);
+        SqlTaskExecutionFactory defaultTaskExecutionFactory = new SqlTaskExecutionFactory(taskNotificationExecutor, taskExecutor, planner, tracer, config);
         TaskExecutionFactory taskExecutionFactory = taskExecutionFactoryDecorator
                 .map(decorator -> decorator.decorate(defaultTaskExecutionFactory))
                 .orElse(defaultTaskExecutionFactory);

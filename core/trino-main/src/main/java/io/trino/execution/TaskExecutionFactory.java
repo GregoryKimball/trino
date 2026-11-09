@@ -43,6 +43,6 @@ public interface TaskExecutionFactory
      */
     interface Decorator
     {
-        TaskExecutionFactory decorate(TaskExecutionFactory defaultFactory);
+        TaskExecutionFactory decorate(SqlTaskExecutionFactory defaultFactory);
     }
 }
