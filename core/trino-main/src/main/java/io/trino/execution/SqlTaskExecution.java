@@ -86,6 +86,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
 
 public class SqlTaskExecution
+        implements TaskExecution
 {
     private final TaskId taskId;
     private final TaskStateMachine taskStateMachine;
@@ -196,6 +197,7 @@ public class SqlTaskExecution
     }
 
     // this must be synchronized to prevent a concurrent call to checkTaskCompletion() from proceeding before all task lifecycle drivers are created
+    @Override
     public synchronized void start()
     {
         try (SetThreadName _ = new SetThreadName("Task-" + getTaskId())) {
@@ -321,11 +323,13 @@ public class SqlTaskExecution
         return taskId;
     }
 
+    @Override
     public TaskContext getTaskContext()
     {
         return taskContext;
     }
 
+    @Override
     public void addSplitAssignments(List<SplitAssignment> splitAssignments)
     {
         requireNonNull(splitAssignments, "splitAssignments is null");
@@ -509,6 +513,7 @@ public class SqlTaskExecution
         }
     }
 
+    @Override
     public synchronized Set<PlanNodeId> getNoMoreSplits()
     {
         ImmutableSet.Builder<PlanNodeId> noMoreSplits = ImmutableSet.builder();

@@ -49,6 +49,7 @@ import io.trino.execution.QueryIdGenerator;
 import io.trino.execution.QueryManagerConfig;
 import io.trino.execution.SqlTaskManager;
 import io.trino.execution.TableExecuteContextManager;
+import io.trino.execution.TaskExecutionFactory;
 import io.trino.execution.TaskManagementExecutor;
 import io.trino.execution.TaskManagerConfig;
 import io.trino.execution.executor.TaskExecutor;
@@ -261,6 +262,7 @@ public class ServerMainModule
         newExporter(binder).export(TaskResource.class).withGeneratedName();
         binder.bind(TaskManagementExecutor.class).in(Scopes.SINGLETON);
         binder.bind(SqlTaskManager.class).in(Scopes.SINGLETON);
+        newOptionalBinder(binder, TaskExecutionFactory.Decorator.class);
         binder.bind(TableExecuteContextManager.class).in(Scopes.SINGLETON);
 
         // memory revoking scheduler

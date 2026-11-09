@@ -160,7 +160,8 @@ public class SqlTaskManager
             NodeSpillConfig nodeSpillConfig,
             GcMonitor gcMonitor,
             Tracer tracer,
-            ExchangeManagerRegistry exchangeManagerRegistry)
+            ExchangeManagerRegistry exchangeManagerRegistry,
+            Optional<TaskExecutionFactory.Decorator> taskExecutionFactoryDecorator)
     {
         this(versionEmbedder,
                 connectorServicesProvider,
@@ -178,7 +179,8 @@ public class SqlTaskManager
                 gcMonitor,
                 tracer,
                 exchangeManagerRegistry,
-                STUCK_SPLIT_STACK_TRACE_PREDICATE);
+                STUCK_SPLIT_STACK_TRACE_PREDICATE,
+                taskExecutionFactoryDecorator);
     }
 
     @VisibleForTesting
@@ -201,6 +203,46 @@ public class SqlTaskManager
             ExchangeManagerRegistry exchangeManagerRegistry,
             Predicate<List<StackTraceElement>> stuckSplitStackTracePredicate)
     {
+        this(versionEmbedder,
+                connectorServicesProvider,
+                planner,
+                languageFunctionProvider,
+                locationFactory,
+                taskExecutor,
+                nodeInfo,
+                localMemoryManager,
+                taskManagementExecutor,
+                config,
+                nodeMemoryConfig,
+                localSpillManager,
+                nodeSpillConfig,
+                gcMonitor,
+                tracer,
+                exchangeManagerRegistry,
+                stuckSplitStackTracePredicate,
+                Optional.empty());
+    }
+
+    private SqlTaskManager(
+            VersionEmbedder versionEmbedder,
+            ConnectorServicesProvider connectorServicesProvider,
+            LocalExecutionPlanner planner,
+            LanguageFunctionProvider languageFunctionProvider,
+            LocationFactory locationFactory,
+            TaskExecutor taskExecutor,
+            NodeInfo nodeInfo,
+            LocalMemoryManager localMemoryManager,
+            TaskManagementExecutor taskManagementExecutor,
+            TaskManagerConfig config,
+            NodeMemoryConfig nodeMemoryConfig,
+            LocalSpillManager localSpillManager,
+            NodeSpillConfig nodeSpillConfig,
+            GcMonitor gcMonitor,
+            Tracer tracer,
+            ExchangeManagerRegistry exchangeManagerRegistry,
+            Predicate<List<StackTraceElement>> stuckSplitStackTracePredicate,
+            Optional<TaskExecutionFactory.Decorator> taskExecutionFactoryDecorator)
+    {
         this.connectorServicesProvider = requireNonNull(connectorServicesProvider, "connectorServicesProvider is null");
         this.languageFunctionProvider = languageFunctionProvider;
 
@@ -219,7 +261,10 @@ public class SqlTaskManager
         this.driverYieldExecutor = newScheduledThreadPool(config.getTaskYieldThreads(), threadsNamed("task-yield-%s"));
         this.driverTimeoutExecutor = newScheduledThreadPool(config.getDriverTimeoutThreads(), threadsNamed("task-driver-timeout-%s"));
 
-        SqlTaskExecutionFactory sqlTaskExecutionFactory = new SqlTaskExecutionFactory(taskNotificationExecutor, taskExecutor, planner, tracer, config);
+        SqlTaskExecutionFactory defaultTaskExecutionFactory = new SqlTaskExecutionFactory(taskNotificationExecutor, taskExecutor, planner, tracer, config);
+        TaskExecutionFactory taskExecutionFactory = taskExecutionFactoryDecorator
+                .map(decorator -> decorator.decorate(defaultTaskExecutionFactory))
+                .orElse(defaultTaskExecutionFactory);
 
         DataSize maxQueryMemoryPerNode = nodeMemoryConfig.getMaxQueryMemoryPerNode();
         DataSize maxQuerySpillPerNode = nodeSpillConfig.getQueryMaxSpillPerNode();
@@ -238,7 +283,7 @@ public class SqlTaskManager
                             nodeInfo.getNodeId(),
                             queryContexts.getUnchecked(taskId.queryId()),
                             tracer,
-                            sqlTaskExecutionFactory,
+                            taskExecutionFactory,
                             taskNotificationExecutor,
                             sqlTask -> {
                                 languageFunctionProvider.unregisterTask(taskId);

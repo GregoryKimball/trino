@@ -35,6 +35,7 @@ import static io.trino.tracing.ScopedSpan.scopedSpan;
 import static java.util.Objects.requireNonNull;
 
 public class SqlTaskExecutionFactory
+        implements TaskExecutionFactory
 {
     private final Executor taskNotificationExecutor;
 
@@ -60,6 +61,7 @@ public class SqlTaskExecutionFactory
         this.cpuTimerEnabled = config.isTaskCpuTimerEnabled();
     }
 
+    @Override
     public SqlTaskExecution create(
             Session session,
             Span taskSpan,
@@ -69,6 +71,37 @@ public class SqlTaskExecutionFactory
             PlanFragment fragment,
             Map<PlanNodeId, ConnectorTableCredentials> tableCredentials,
             Runnable notifyStatusChanged)
+    {
+        return create(
+                session,
+                taskSpan,
+                queryContext,
+                taskStateMachine,
+                outputBuffer,
+                tableCredentials,
+                notifyStatusChanged,
+                taskContext -> planner.plan(
+                        taskContext,
+                        fragment.getRoot(),
+                        fragment.getOutputPartitioningScheme(),
+                        fragment.getOutputSkewedBucketCount(),
+                        fragment.getPartitionedSources(),
+                        outputBuffer));
+    }
+
+    /**
+     * Creates a task execution that runs drivers from a caller-supplied local
+     * plan instead of one planned from the fragment.
+     */
+    public SqlTaskExecution create(
+            Session session,
+            Span taskSpan,
+            QueryContext queryContext,
+            TaskStateMachine taskStateMachine,
+            OutputBuffer outputBuffer,
+            Map<PlanNodeId, ConnectorTableCredentials> tableCredentials,
+            Runnable notifyStatusChanged,
+            LocalPlanner localPlanner)
     {
         TaskContext taskContext = queryContext.addTaskContext(
                 taskStateMachine,
@@ -81,13 +114,7 @@ public class SqlTaskExecutionFactory
         LocalExecutionPlan localExecutionPlan;
         try (SetThreadName _ = new SetThreadName("Task-" + taskStateMachine.getTaskId())) {
             try (var ignoredSpan = scopedSpan(tracer, "local-planner")) {
-                localExecutionPlan = planner.plan(
-                        taskContext,
-                        fragment.getRoot(),
-                        fragment.getOutputPartitioningScheme(),
-                        fragment.getOutputSkewedBucketCount(),
-                        fragment.getPartitionedSources(),
-                        outputBuffer);
+                localExecutionPlan = localPlanner.plan(taskContext);
             }
             catch (Throwable e) {
                 // planning failed
@@ -105,5 +132,10 @@ public class SqlTaskExecutionFactory
                 taskExecutor,
                 tracer,
                 taskNotificationExecutor);
+    }
+
+    public interface LocalPlanner
+    {
+        LocalExecutionPlan plan(TaskContext taskContext);
     }
 }
